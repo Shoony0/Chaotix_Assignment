@@ -1,0 +1,62 @@
+
+# My version of docker = 18.09.4-ce
+# Compose file format supported till version 18.06.0+ is 3.7
+version: "3.7"
+
+services:
+  redis:
+    image: "redis:5.0.9-alpine3.11"
+    restart: always
+    command: redis-server
+    environment:
+      - REDIS_REPLICATION_MODE=master
+    networks: # connect to the bridge
+      - redis_network
+
+  celery_django:
+    build: .
+    restart: always
+    volumes:
+      - type: bind
+        source: ../generate_images
+        target: /usr/app/media/generate_images
+      - type: bind
+        source: db.sqlite3
+        target: /usr/app/db.sqlite3
+    command:
+      - bash
+      - -c
+      - |
+        celery -A chaotix worker -l INFO
+    depends_on:
+      - redis
+    networks: # connect to the bridge
+      - redis_network
+
+  webapp:
+    build: .
+    restart: always
+    volumes:
+      - type: bind
+        source: ../generate_images
+        target: /usr/app/media/generate_images
+      - type: bind
+        source: db.sqlite3
+        target: /usr/app/db.sqlite3
+    ports:
+      - 800:8000
+    command:
+      - bash
+      - -c
+      - |
+        python manage.py runserver 0.0.0.0:8000
+    depends_on:
+      - celery_django
+    stdin_open: true # Add this line into your service
+    tty: true # Add this line into your service
+    networks:
+      - redis_network
+
+networks:
+  redis_network:
+    driver: bridge
